@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+# Brief:
+# Generate random looking passwords deterministically from string passed as parameter.
+# Password is generated using HashCash-like PoW, hence should be somewhat hack-proof.
+# Time required to generate a password varies widely based on parameter: ~0.2-2s
+# Password is bound to device.
+
+# Usage: ./passgen <text> <number of characters>
+#===================================================
+
+hash_of(){
+  sha512sum <(echo "${1}") | awk '{print $1}'
+}; export -f hash_of
+
+hash_to_base64(){
+  local hash_hex="${1}"
+  echo "${hash_hex}" | xxd -r -p | base64 -w 0
+}; export -f hash_to_base64
+
+input="${1}"
+num_chars="${2:-100}"
+
+input_hash="$(hash_of "${input}")"
+salt="$(hash_of "${input_hash}_$(cat /sys/class/net/eth0/address)")" # Using MAC address
+
+nonce=0
+
+until [[ "${final_hash}" == 00* ]];do
+  nonce_hash="$(hash_of "${nonce}")"
+  final_hash="$(hash_of "${salt}_${nonce_hash}")"
+  ((nonce++))
+done
+
+base64_full="$(hash_to_base64 "${final_hash}")"
+length="${#base64_full}"
+if ((num_chars>length-2));then
+  echo "${base64_full:0:${num_chars}}"
+else
+  index="-$((num_chars+1))"
+  echo "${base64_full:${index}:${num_chars}}"
+fi
