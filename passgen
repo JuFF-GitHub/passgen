@@ -18,19 +18,48 @@ hash_to_base64(){
   echo "${hash_hex}" | xxd -r -p | base64 -w 0
 }; export -f hash_to_base64
 
-input="${1}"
-width="${2:-8}"
+while getopts ':w:' option; do
+  case "${option}" in
+    w)
+      width="${OPTARG}"
+      ;;
+    *)
+      echo "Acess passgen in one of these ways:
+  Non-interactive: ${0} -w <width of desired passwd> <text you can remember>
+  Semi-interactive: ${0} -w <width of desired passwd>
+  Interactive: ${0}"
+      exit
+      ;;
+  esac
+done
+input="${!OPTIND}"
+
+if [[ -z "${input}" ]]; then
+  tput smcup
+  trap 'read -n1 -p "Press any key to exit"; tput rmcup; exit' exit INT QUIT
+  read -erp "Enter text that you will remember: " input
+  width="${width:-"$(read -erp "No. of characters in password [Press ENTER to skip]: "; echo $REPLY)"}"
+  read -erp "PASSGEN_SALT [Press ENTER to skip]: " input_salt
+  tput cuu1; tput el
+  PASSGEN_SALT="${input_salt:-"${PASSGEN_SALT}"}"
+fi
+width="${width:-8}"
+salt="${PASSGEN_SALT:-"$(cat /sys/class/net/eth0/address)"}" # Using MAC address if PASSGEN_SALT not set
+echo "PASSGEN_SALT: ${salt}"
 
 input_hash="$(hash_of "${input}_${width}")"
-salt="$(hash_of "${input_hash}_$(cat /sys/class/net/eth0/address)")" # Using MAC address
+salt="$(hash_of "${input_hash}_${salt}")"
 
 nonce=0
+final_hash= # Clean start
+timestamp="${EPOCHSECONDS}"
 
-until [[ "${final_hash}" == 00* ]];do
-  nonce_hash="$(hash_of "${nonce}")"
+until [[ "${final_hash}" == 000* ]] && ((nonce>1000));do
+  nonce_hash="$(hash_of "${final_hash}_${nonce}")" # Makes it essentially iterative/single-threaded
   final_hash="$(hash_of "${salt}_${nonce_hash}")"
   ((nonce++))
 done
+final_hash="$(hash_of "${final_hash}")" # Just to make things random again - wiping out initial 0s
 
 base64_full="$(hash_to_base64 "${final_hash}")"
 base64_unpadded="${base64_full%%=*}"
@@ -77,4 +106,5 @@ if ! [[ "${password}" =~ .*[0-9]+.* ]]; then
   password="$(echo "${password}" | sed s/./9/${insert_at})"
 fi
 
-echo "${password}"
+echo "Password: ${password}"
+echo "Time taken: $((EPOCHSECONDS-timestamp))s"
