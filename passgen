@@ -36,32 +36,45 @@ base64_full="$(hash_to_base64 "${final_hash}")"
 base64_unpadded="${base64_full%%=*}"
 unpadded_length="${#base64_unpadded}"
 if ((width>=unpadded_length));then
-  passwd="${base64_unpadded}"
+  password="${base64_unpadded}"
 else
   offset="-${width}"
-  passwd="${base64_unpadded: ${offset}:${width}}"
+  password="${base64_unpadded: ${offset}:${width}}"
 fi
 
-# Now putting in special characters to comply with requirements: #, @, _, 9, A, z
-# TODO: Polish required. Otherwise two different replacements may occur at same insert_at
+password="${password//\//@}"
+password="${password//+/$}"
+
+# Making sure password complies with: atleast one special character, one uppercase, one numeral, one lowercase
+
 RANDOM="${nonce}" # Seeding PRNG
+screen=()
 
-insert_at="$((RANDOM%width+1))" # +1 avoids 0
-passwd="$(echo "${passwd}" | sed s/./@/${insert_at})"
+get_insert_at(){
+  while [[ "${screen[@]}" =~ "${insert_at}" ]];do
+    insert_at="$((RANDOM%width+1))" # +1 avoids 0
+  done
+  screen+=("${insert_at}")
+}
 
-insert_at="$((RANDOM%width+1))"
-passwd="$(echo "${passwd}" | sed s/./#/${insert_at})"
+if ! [[ "${password}" =~ .*[@|$]+.* ]]; then
+  get_insert_at
+  password="$(echo "${password}" | sed s/./@/${insert_at})"
+fi
 
-insert_at="$((RANDOM%width+1))"
-passwd="$(echo "${passwd}" | sed s/./_/${insert_at})"
+if ! [[ "${password}" =~ .*[a-z]+.* ]]; then
+  get_insert_at
+  password="$(echo "${password}" | sed s/./z/${insert_at})"
+fi
 
-insert_at="$((RANDOM%width+1))"
-passwd="$(echo "${passwd}" | sed s/./9/${insert_at})"
+if ! [[ "${password}" =~ .*[A-Z]+.* ]]; then
+  get_insert_at
+  password="$(echo "${password}" | sed s/./Z/${insert_at})"
+fi
 
-insert_at="$((RANDOM%width+1))"
-passwd="$(echo "${passwd}" | sed s/./A/${insert_at})"
+if ! [[ "${password}" =~ .*[0-9]+.* ]]; then
+  get_insert_at
+  password="$(echo "${password}" | sed s/./9/${insert_at})"
+fi
 
-insert_at="$((RANDOM%width+1))"
-passwd="$(echo "${passwd}" | sed s/./z/${insert_at})"
-
-echo "${passwd}"
+echo "${password}"
