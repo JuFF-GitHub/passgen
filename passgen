@@ -9,6 +9,8 @@
 # Usage: ./passgen <text you can remember> [<number of characters>]
 #===================================================
 
+trap 'echo exiting... >&2; exit' INT QUIT TERM
+
 hash_of(){
   sha512sum <(echo "${1}") | awk '{print $1}'
 }; export -f hash_of
@@ -36,7 +38,7 @@ input="${!OPTIND}"
 
 if [[ -z "${input}" ]]; then
   tput smcup
-  trap 'read -n1 -p "Press any key to exit"; tput rmcup; exit' exit INT QUIT
+  trap 'read -n1 -p "Press any key to exit"; tput rmcup' exit
   read -erp "Enter text that you will remember: " input
   width="${width:-"$(read -erp "No. of characters in password [Press ENTER to skip]: "; echo $REPLY)"}"
   read -erp "PASSGEN_SALT [Press ENTER to skip]: " input_salt
