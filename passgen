@@ -6,7 +6,7 @@
 # Time required to generate a password varies widely based on parameter: ~0.2-2s
 # Password is bound to device.
 
-# Usage: ./passgen <text> <number of characters>
+# Usage: ./passgen <text you can remember> [<number of characters>]
 #===================================================
 
 hash_of(){
@@ -19,9 +19,9 @@ hash_to_base64(){
 }; export -f hash_to_base64
 
 input="${1}"
-num_chars="${2:-100}"
+width="${2:-8}"
 
-input_hash="$(hash_of "${input}")"
+input_hash="$(hash_of "${input}_${width}")"
 salt="$(hash_of "${input_hash}_$(cat /sys/class/net/eth0/address)")" # Using MAC address
 
 nonce=0
@@ -33,10 +33,35 @@ until [[ "${final_hash}" == 00* ]];do
 done
 
 base64_full="$(hash_to_base64 "${final_hash}")"
-length="${#base64_full}"
-if ((num_chars>length-2));then
-  echo "${base64_full:0:${num_chars}}"
+base64_unpadded="${base64_full%%=*}"
+unpadded_length="${#base64_unpadded}"
+if ((width>=unpadded_length));then
+  passwd="${base64_unpadded}"
 else
-  index="-$((num_chars+1))"
-  echo "${base64_full:${index}:${num_chars}}"
+  offset="-${width}"
+  passwd="${base64_unpadded: ${offset}:${width}}"
 fi
+
+# Now putting in special characters to comply with requirements: #, @, _, 9, A, z
+# TODO: Polish required. Otherwise two different replacements may occur at same insert_at
+RANDOM="${nonce}" # Seeding PRNG
+
+insert_at="$((RANDOM%width+1))" # +1 avoids 0
+passwd="$(echo "${passwd}" | sed s/./@/${insert_at})"
+
+insert_at="$((RANDOM%width+1))"
+passwd="$(echo "${passwd}" | sed s/./#/${insert_at})"
+
+insert_at="$((RANDOM%width+1))"
+passwd="$(echo "${passwd}" | sed s/./_/${insert_at})"
+
+insert_at="$((RANDOM%width+1))"
+passwd="$(echo "${passwd}" | sed s/./9/${insert_at})"
+
+insert_at="$((RANDOM%width+1))"
+passwd="$(echo "${passwd}" | sed s/./A/${insert_at})"
+
+insert_at="$((RANDOM%width+1))"
+passwd="$(echo "${passwd}" | sed s/./z/${insert_at})"
+
+echo "${passwd}"
