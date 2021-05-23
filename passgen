@@ -3,8 +3,8 @@
 # Brief:
 # Generate random looking passwords deterministically from string passed as parameter.
 # Password is generated using HashCash-like PoW, hence should be somewhat hack-proof.
-# Time required to generate a password varies widely based on parameter: ~0.2-2s
-# Password is bound to device.
+# Time required to generate a password varies widely based on parameter
+# Password is bound to device by default.
 
 # Usage: ./passgen <text you can remember> [<number of characters>]
 #===================================================
@@ -38,30 +38,35 @@ input="${!OPTIND}"
 
 if [[ -z "${input}" ]]; then
   tput smcup
-  trap 'read -n1 -p "Press any key to exit"; tput rmcup' exit
+  trap 'read -n1 -p "Press any key to exit"; tput rmcup; rm -f ${tmpfile}' exit
   read -erp "Enter text that you will remember: " input
   width="${width:-"$(read -erp "No. of characters in password [Press ENTER to skip]: "; echo $REPLY)"}"
   read -erp "PASSGEN_SALT [Press ENTER to skip]: " input_salt
   tput cuu1; tput el
   PASSGEN_SALT="${input_salt:-"${PASSGEN_SALT}"}"
+else
+  trap 'rm -f ${tmpfile}' exit
 fi
+
 width="${width:-8}"
 salt="${PASSGEN_SALT:-"$(cat /sys/class/net/eth0/address)"}" # Using MAC address if PASSGEN_SALT not set
 echo "PASSGEN_SALT: ${salt}"
 
 input_hash="$(hash_of "${input}_${width}")"
-salt="$(hash_of "${input_hash}_${salt}")"
+final_hash="$(hash_of "${input_hash}_${salt}")"
 
-nonce=0
-final_hash= # Clean start
 timestamp="${EPOCHSECONDS}"
 
-until [[ "${final_hash}" == 000* ]] && ((nonce>1000));do
-  nonce_hash="$(hash_of "${final_hash}_${nonce}")" # Makes it essentially iterative/single-threaded
-  final_hash="$(hash_of "${salt}_${nonce_hash}")"
-  ((nonce++))
+export tmpfile="$(mktemp /tmp/XXXXX.passgen)"
+
+nonce=0
+until ((nonce > 0xFFFFF)); do
+  "${BASH_SOURCE%/*}/hbkdf" "${final_hash}" 5 > "${tmpfile}"
+  nonce="0x$(head -1 "${tmpfile}" | awk '{ print $2 }')"
+  final_hash="$(awk NR==2 "${tmpfile}" | awk '{ print $3 }')"
 done
-final_hash="$(hash_of "${final_hash}")" # Just to make things random again - wiping out initial 0s
+
+final_hash="$(hash_of "${final_hash}")" # Just to make things random again - wiping out trailing 0s
 
 base64_full="$(hash_to_base64 "${final_hash}")"
 base64_unpadded="${base64_full%%=*}"
@@ -78,7 +83,7 @@ password="${password//+/$}"
 
 # Making sure password complies with: atleast one special character, one uppercase, one numeral, one lowercase
 
-RANDOM="${nonce}" # Seeding PRNG
+RANDOM="$((nonce))" # Seeding PRNG
 screen=()
 
 get_insert_at(){

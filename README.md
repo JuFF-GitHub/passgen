@@ -8,7 +8,7 @@ Passgen is meant to generate strong, valid, random-looking passwords determinist
 
 ### Security model
 
-Every password generation requires an effectively single-threaded process that takes a significant time (mostly <1m though). This is because the algorithm uses a [Hashcash](https://en.bitcoin.it/wiki/Hashcash)-like [proof-of-work](https://en.bitcoin.it/wiki/Proof_of_work) procedure with target SHA-512 <2^509. The algorithm is so designed that a minimum amount of work must always be done. 
+Every password generation requires an effectively single-threaded process that takes a significant time (mostly <1m though). This is because the algorithm uses a [Hashcash](https://en.bitcoin.it/wiki/Hashcash)-like [proof-of-work](https://en.bitcoin.it/wiki/Proof_of_work) procedure targeted for 20 bit partial hash-collision, viz. the final hash must have 20/4=5 zeroes in its hex representation. All the hashes are SHA512. The algorithm is so designed that a minimum amount of work must always be done. 
 
 Also, it cannot be predicted beforehand exactly how much time the password generation would take. For some values of the given text-string, the time taken may be way over the 1m mark. Hopefully, this unpredictability and requirement of single-threadedness would make brute-force hacks slow.
 
